@@ -1,0 +1,30 @@
+# AISmell - OpenPOM Olfactory Prediction Pipeline
+# Install order matters due to native C++/CUDA dependencies.
+#
+# For Google Colab (Linux x86_64, T4 GPU), run setup_colab.sh instead.
+# For local development, create a conda environment first:
+#   conda create -n aismell python=3.10 -y && conda activate aismell
+
+numpy>=1.24,<2.0
+pandas>=2.0
+scikit-learn>=1.3
+scipy>=1.11
+matplotlib>=3.7
+seaborn>=0.12
+tqdm>=4.65
+iterstrat>=0.1.7          # iterative-stratification for multi-label splits
+
+# PyTorch (install via conda or pip+cu118/cu121 wheels)
+# torch>=2.1,<2.5
+
+# RDKit (install via conda-forge: conda install -c conda-forge rdkit)
+# rdkit>=2023.09
+
+# DGL (install matching your CUDA version)
+# dgl>=1.1
+
+# DeepChem (pre-release for MPNN/POM support)
+# deepchem>=2.8.1.dev
+
+# OpenPOM
+# pip install openpom
