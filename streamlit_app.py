@@ -15,7 +15,7 @@ except Exception:
 from dataset import MolGraph, collate_mol_graphs, NUM_ODOR_LABELS
 from model import MPNNPOMModel
 
-# Page configuration (no emojis)
+# Page configuration
 st.set_page_config(
     page_title="AISmell - Olfactory AI Predictor",
     layout="wide",
@@ -56,7 +56,10 @@ PRESET_MOLECULES = {
     "Ethyl butyrate (Fruity / Pineapple)": "CCCC(=O)OCC",
     "Eugenol (Clove / Spicy)": "COc1cc(CC=C)ccc1O",
     "Limonene (Citrus / Orange)": "CC1=CCC(CC1)C(=C)C",
-    "Trimethylamine (Fishy)": "CN(C)C"
+    "Trimethylamine (Fishy)": "CN(C)C",
+    "Menthol (Cool Mint)": "CC1CCC(C(C1)O)C(C)C",
+    "Benzaldehyde (Almond)": "O=Cc1ccccc1",
+    "Ethyl maltol (Caramel / Cotton Candy)": "CCC1=C(O)C(=O)C=CO1"
 }
 
 @st.cache_resource
@@ -95,21 +98,25 @@ def compute_properties(mol):
         "Rotatable Bonds": Descriptors.NumRotatableBonds(mol)
     }
 
+# Session state initialization for SMILES input
+if "input_smiles" not in st.session_state:
+    st.session_state["input_smiles"] = "CCO"
+
+def apply_preset():
+    choice = st.session_state.get("preset_selection")
+    if choice and choice in PRESET_MOLECULES:
+        st.session_state["input_smiles"] = PRESET_MOLECULES[choice]
+
 # Sidebar
-st.sidebar.title("AISmell Controls")
-st.sidebar.markdown(
-    "Predict molecular scents using a **Graph Neural Network (MPNN)** and the **Principal Odor Map (POM)**."
-)
-
-preset_choice = st.sidebar.selectbox("Choose a sample molecule:", ["Custom SMILES"] + list(PRESET_MOLECULES.keys()))
-
-if preset_choice != "Custom SMILES":
-    default_smiles = PRESET_MOLECULES[preset_choice]
-else:
-    default_smiles = "CCO"
-
-smiles_input = st.sidebar.text_input("SMILES string:", value=default_smiles)
+st.sidebar.title("Configuration")
 top_k = st.sidebar.slider("Number of top descriptors to display:", min_value=5, max_value=25, value=10)
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Presets Quick List")
+for name, smi in PRESET_MOLECULES.items():
+    if st.sidebar.button(name, key=f"btn_{smi}"):
+        st.session_state["input_smiles"] = smi
+        st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
@@ -120,20 +127,74 @@ st.sidebar.markdown(
     """
 )
 
-# Main Page Header (No emojis)
-st.title("AISmell: Predicting Smells from Chemical Structure")
-st.caption("Message Passing Neural Network (MPNN) mapping molecular graphs to 138 perceptual odor descriptors")
+# Main Page Header
+st.title("AISmell: Olfactory Prediction from Molecular Structure")
+st.caption("Message Passing Neural Network (MPNN) mapping chemical structures to 138 perceptual smell descriptors")
 
-if not smiles_input.strip():
-    st.warning("Please enter a SMILES string in the sidebar.")
+# Prominent Custom Input Section
+st.subheader("Molecule Input")
+
+# Instructions on what the app expects
+with st.expander("What does this app expect? (Click to view guide)", expanded=True):
+    st.markdown(
+        """
+        **Input Format:** The app expects a **SMILES string** representing a valid chemical molecule.
+        
+        **What is a SMILES string?**
+        SMILES (Simplified Molecular Input Line Entry System) represents 2D/3D chemical structures as plain text:
+        * **Atoms:** Standard chemical symbols (`C` for Carbon, `O` for Oxygen, `N` for Nitrogen, `S` for Sulfur). Hydrogen atoms are inferred automatically.
+        * **Bonds:** Single bonds are implicit (`CC` = ethane). Double bonds use `=` (`C=O` = carbonyl). Triple bonds use `#` (`C#N` = nitrile).
+        * **Branches:** Parentheses represent branches (`CC(O)C` = 2-propanol).
+        * **Rings:** Numbers designate ring closures (`c1ccccc1` = benzene ring).
+        
+        **Where can I find SMILES for any molecule?**
+        1. Go to **PubChem** (pubchem.ncbi.nlm.nih.gov) or **Wikipedia**.
+        2. Search for any compound (e.g., *Caffeine*, *Limonene*, *Menthol*, *Aspirin*).
+        3. Copy the **Canonical SMILES** string and paste it into the box below.
+        """
+    )
+
+# Input controls
+input_col1, input_col2 = st.columns([2.5, 1.2])
+
+with input_col1:
+    user_smiles = st.text_input(
+        "Enter your own custom SMILES string here:",
+        value=st.session_state["input_smiles"],
+        key="custom_smiles_field",
+        placeholder="e.g. CCO, c1ccccc1, CC(=O)O, O=Cc1ccc(O)c(OC)c1",
+        help="Type or paste any chemical SMILES string here. The model will parse the graph and predict its scent."
+    )
+    # Sync with session state if changed directly
+    if user_smiles != st.session_state["input_smiles"]:
+        st.session_state["input_smiles"] = user_smiles
+
+with input_col2:
+    st.selectbox(
+        "Or pick from sample molecules:",
+        options=["(Select a preset to load)"] + list(PRESET_MOLECULES.keys()),
+        key="preset_selection",
+        on_change=apply_preset
+    )
+
+current_smiles = st.session_state["input_smiles"].strip()
+
+# Validate SMILES input
+if not current_smiles:
+    st.warning("Please enter a SMILES string in the input box above.")
     st.stop()
 
-mol = Chem.MolFromSmiles(smiles_input.strip())
+mol = Chem.MolFromSmiles(current_smiles)
 
 if mol is None:
-    st.error(f"Invalid SMILES string: `{smiles_input}`. RDKit could not parse this molecule.")
+    st.error(
+        f"Invalid SMILES string: '{current_smiles}'. "
+        "RDKit could not parse this as a valid chemical structure. "
+        "Please check the spelling, bond symbols, or copy the Canonical SMILES directly from PubChem."
+    )
     st.stop()
 
+# Structure & Predictions
 col1, col2 = st.columns([1, 1.4])
 
 with col1:
@@ -155,9 +216,9 @@ with col1:
 with col2:
     st.subheader("Olfactory Predictions")
     
-    with st.spinner("Featurizing molecule and running message passing..."):
+    with st.spinner("Parsing molecular graph and computing message passing..."):
         try:
-            graph = MolGraph(smiles_input.strip())
+            graph = MolGraph(current_smiles)
             node_feat_dim = graph.node_features.shape[1]
             edge_feat_dim = graph.edge_features.shape[1] if graph.num_edges > 0 else 8
             
@@ -174,19 +235,16 @@ with col2:
             top_labels = [LABELS[i] for i in top_indices]
             top_probs = [float(probs[i]) for i in top_indices]
             
-            # Format dataframe for display
             results_df = pd.DataFrame({
                 "Descriptor": top_labels,
                 "Probability": top_probs,
                 "Percentage": [f"{p * 100:.1f}%" for p in top_probs]
             })
             
-            # Top result banner
             primary_smell = top_labels[0].upper()
             primary_conf = top_probs[0] * 100
-            st.success(f"**Primary Odor Descriptor:** `{primary_smell}` ({primary_conf:.1f}% probability)")
+            st.success(f"Primary Odor Descriptor: **{primary_smell}** ({primary_conf:.1f}% probability)")
             
-            # Chart
             chart_df = pd.DataFrame({
                 "Descriptor": top_labels,
                 "Probability": top_probs
@@ -194,7 +252,6 @@ with col2:
             
             st.bar_chart(chart_df, horizontal=True)
             
-            # Table view
             with st.expander("Detailed Scores Table", expanded=False):
                 st.dataframe(results_df, hide_index=True, use_container_width=True)
                 
@@ -202,7 +259,7 @@ with col2:
             st.error(f"Error during graph inference: {str(e)}")
             st.stop()
 
-# Principal Odor Map (POM) Latent Space section (No emojis)
+# Principal Odor Map (POM) Latent Space section
 st.markdown("---")
 st.subheader("Principal Odor Map (POM) 256-D Latent Space")
 st.markdown(
