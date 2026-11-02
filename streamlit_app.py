@@ -4,7 +4,13 @@ import pandas as pd
 import torch
 from pathlib import Path
 from rdkit import Chem
-from rdkit.Chem import Descriptors, Draw, rdMolDescriptors
+from rdkit.Chem import Descriptors, rdMolDescriptors
+
+try:
+    from rdkit.Chem import Draw
+    HAS_RDKIT_DRAW = True
+except Exception:
+    HAS_RDKIT_DRAW = False
 
 from dataset import MolGraph, collate_mol_graphs, NUM_ODOR_LABELS
 from model import MPNNPOMModel
@@ -133,8 +139,14 @@ col1, col2 = st.columns([1, 1.4])
 
 with col1:
     st.subheader("Molecular Structure (2D)")
-    img = Draw.MolToImage(mol, size=(450, 320))
-    st.image(img, use_container_width=True)
+    if HAS_RDKIT_DRAW:
+        try:
+            img = Draw.MolToImage(mol, size=(450, 320))
+            st.image(img, use_container_width=True)
+        except Exception as draw_err:
+            st.info("Molecular 2D diagram preview unavailable on this host.")
+    else:
+        st.info("Molecular 2D diagram preview unavailable.")
     
     props = compute_properties(mol)
     with st.expander("Chemical Properties", expanded=True):
