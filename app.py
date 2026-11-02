@@ -45,8 +45,8 @@ def get_or_load_model():
     if model is not None:
         return model
     
-    # 45 node features, 8 edge features as defined in dataset.py
-    m = MPNNPOMModel(node_feat_dim=45, edge_feat_dim=8, hidden_dim=128, pom_dim=256, num_tasks=NUM_ODOR_LABELS)
+    # 49 node features, 8 edge features as defined in dataset.py
+    m = MPNNPOMModel(node_feat_dim=49, edge_feat_dim=8, hidden_dim=128, pom_dim=256, num_tasks=NUM_ODOR_LABELS)
     weights_path = Path("saved_models/best_model.pt")
     if weights_path.exists():
         try:
@@ -109,7 +109,7 @@ EXAMPLES = [
 with gr.Blocks(title="AISmell - Olfactory AI Predictor", theme=gr.themes.Soft()) as demo:
     gr.Markdown(
         """
-        # 👃 AISmell: Predicting Smells with AI
+        # AISmell: Predicting Smells with AI
         Based on the paper *"A principal odor map unifies diverse tasks in olfactory perception"* (Science 2023) and OpenPOM.
         Enter a chemical SMILES string to predict what it smells like using a Message Passing Neural Network (MPNN).
         """

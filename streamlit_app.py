@@ -15,10 +15,9 @@ except Exception:
 from dataset import MolGraph, collate_mol_graphs, NUM_ODOR_LABELS
 from model import MPNNPOMModel
 
-# Page configuration
+# Page configuration (no emojis)
 st.set_page_config(
     page_title="AISmell - Olfactory AI Predictor",
-    page_icon="👃",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -61,12 +60,12 @@ PRESET_MOLECULES = {
 }
 
 @st.cache_resource
-def load_model():
-    """Initializes and caches the MPNN-POM architecture."""
+def load_model(node_feat_dim: int = 49, edge_feat_dim: int = 8):
+    """Initializes and caches the MPNN-POM architecture with matching feature dimensions."""
     device = torch.device("cpu")
     model = MPNNPOMModel(
-        node_feat_dim=45,
-        edge_feat_dim=8,
+        node_feat_dim=node_feat_dim,
+        edge_feat_dim=edge_feat_dim,
         hidden_dim=128,
         num_message_passing=5,
         pom_dim=256,
@@ -121,8 +120,8 @@ st.sidebar.markdown(
     """
 )
 
-# Main Page Header
-st.title("👃 AISmell: Predicting Smells from Chemical Structure")
+# Main Page Header (No emojis)
+st.title("AISmell: Predicting Smells from Chemical Structure")
 st.caption("Message Passing Neural Network (MPNN) mapping molecular graphs to 138 perceptual odor descriptors")
 
 if not smiles_input.strip():
@@ -143,7 +142,7 @@ with col1:
         try:
             img = Draw.MolToImage(mol, size=(450, 320))
             st.image(img, use_container_width=True)
-        except Exception as draw_err:
+        except Exception:
             st.info("Molecular 2D diagram preview unavailable on this host.")
     else:
         st.info("Molecular 2D diagram preview unavailable.")
@@ -159,10 +158,13 @@ with col2:
     with st.spinner("Featurizing molecule and running message passing..."):
         try:
             graph = MolGraph(smiles_input.strip())
+            node_feat_dim = graph.node_features.shape[1]
+            edge_feat_dim = graph.edge_features.shape[1] if graph.num_edges > 0 else 8
+            
             dummy_label = np.zeros(NUM_ODOR_LABELS, dtype=np.float32)
             batch = collate_mol_graphs([(graph, dummy_label)])
             
-            model = load_model()
+            model = load_model(node_feat_dim=node_feat_dim, edge_feat_dim=edge_feat_dim)
             with torch.no_grad():
                 logits = model.forward_from_batch(batch)
                 probs = torch.sigmoid(logits).cpu().numpy()[0]
@@ -200,9 +202,9 @@ with col2:
             st.error(f"Error during graph inference: {str(e)}")
             st.stop()
 
-# Principal Odor Map (POM) Latent Space section
+# Principal Odor Map (POM) Latent Space section (No emojis)
 st.markdown("---")
-st.subheader("🧬 Principal Odor Map (POM) 256-D Latent Space")
+st.subheader("Principal Odor Map (POM) 256-D Latent Space")
 st.markdown(
     """
     The **Principal Odor Map (POM)** is a 256-dimensional continuous metric space extracted after 5 rounds of message passing 

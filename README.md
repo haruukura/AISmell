@@ -51,7 +51,7 @@ python predict.py --smiles "CCO" "c1ccccc1" "CC(=O)O" --top-k 15 --output-json r
 | Component | Detail |
 |---|---|
 | **Input** | SMILES string → RDKit molecular graph |
-| **Node features** | Element (20 types), degree, hybridization, charge, H-count, aromaticity, ring (45 dims) |
+| **Node features** | Element (20 types), degree, hybridization, charge, H-count, aromaticity, ring (49 dims) |
 | **Edge features** | Bond type, conjugation, ring, stereo (8 dims) |
 | **Message passing** | 5 rounds, GRU-based node update, edge-conditioned messages |
 | **Pooling** | Global attention pooling |

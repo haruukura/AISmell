@@ -251,7 +251,7 @@ def train_model(
             torch.save(model.state_dict(), model_path / "best_model.pt")
 
         if epoch % max(1, epochs // 20) == 0 or epoch == 1 or is_best:
-            marker = " ★ best" if is_best else ""
+            marker = " [best]" if is_best else ""
             logger.info(
                 "Epoch %3d/%d  train_loss=%.4f  val_loss=%.4f  "
                 "val_AUC=%.4f  lr=%.2e  (%.1fs)%s",
