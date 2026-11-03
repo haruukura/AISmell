@@ -98,24 +98,25 @@ def compute_properties(mol):
         "Rotatable Bonds": Descriptors.NumRotatableBonds(mol)
     }
 
-# Session state initialization for SMILES input
-if "input_smiles" not in st.session_state:
-    st.session_state["input_smiles"] = "CCO"
+# Session state initialization
+if "active_smiles" not in st.session_state:
+    st.session_state["active_smiles"] = "CCO"
+if "active_name" not in st.session_state:
+    st.session_state["active_name"] = "Ethanol (Alcohol / Wine)"
+if "custom_text_val" not in st.session_state:
+    st.session_state["custom_text_val"] = ""
 
-def apply_preset():
-    choice = st.session_state.get("preset_selection")
-    if choice and choice in PRESET_MOLECULES:
-        st.session_state["input_smiles"] = PRESET_MOLECULES[choice]
-
-# Sidebar
+# Sidebar Quick Presets
 st.sidebar.title("Configuration")
 top_k = st.sidebar.slider("Number of top descriptors to display:", min_value=5, max_value=25, value=10)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Presets Quick List")
+st.sidebar.subheader("Quick Presets")
 for name, smi in PRESET_MOLECULES.items():
-    if st.sidebar.button(name, key=f"btn_{smi}"):
-        st.session_state["input_smiles"] = smi
+    if st.sidebar.button(name, key=f"side_{smi}"):
+        st.session_state["active_smiles"] = smi
+        st.session_state["active_name"] = name
+        st.session_state["custom_text_val"] = ""
         st.rerun()
 
 st.sidebar.markdown("---")
@@ -131,11 +132,11 @@ st.sidebar.markdown(
 st.title("AISmell: Olfactory Prediction from Molecular Structure")
 st.caption("Message Passing Neural Network (MPNN) mapping chemical structures to 138 perceptual smell descriptors")
 
-# Prominent Custom Input Section
+# Molecule Input Section
 st.subheader("Molecule Input")
 
 # Instructions on what the app expects
-with st.expander("What does this app expect? (Click to view guide)", expanded=True):
+with st.expander("What does this app expect? (Click to view guide)", expanded=False):
     st.markdown(
         """
         **Input Format:** The app expects a **SMILES string** representing a valid chemical molecule.
@@ -154,36 +155,60 @@ with st.expander("What does this app expect? (Click to view guide)", expanded=Tr
         """
     )
 
-# Input controls
-input_col1, input_col2 = st.columns([2.5, 1.2])
+# Form with interactive submit button (and Enter key support)
+with st.form("smiles_input_form", clear_on_submit=False):
+    input_col1, input_col2 = st.columns([2.5, 1.3])
+    
+    with input_col1:
+        entered_smiles = st.text_input(
+            "Enter your custom SMILES string (press Enter or click Predict):",
+            value=st.session_state["custom_text_val"],
+            placeholder="e.g. CCO, c1ccccc1, CC(=O)O (or leave empty to use sample molecule below)",
+            help="Type or paste any chemical SMILES string. Press Enter or click Predict Odor to run."
+        )
+        
+    with input_col2:
+        preset_names = list(PRESET_MOLECULES.keys())
+        default_idx = 0
+        if st.session_state["active_name"] in preset_names:
+            default_idx = preset_names.index(st.session_state["active_name"])
+            
+        chosen_sample = st.selectbox(
+            "Or choose a sample molecule:",
+            options=preset_names,
+            index=default_idx
+        )
+        
+    submit_clicked = st.form_submit_button("Predict Odor (or press Enter)", use_container_width=True)
 
-with input_col1:
-    user_smiles = st.text_input(
-        "Enter your own custom SMILES string here:",
-        value=st.session_state["input_smiles"],
-        key="custom_smiles_field",
-        placeholder="e.g. CCO, c1ccccc1, CC(=O)O, O=Cc1ccc(O)c(OC)c1",
-        help="Type or paste any chemical SMILES string here. The model will parse the graph and predict its scent."
-    )
-    # Sync with session state if changed directly
-    if user_smiles != st.session_state["input_smiles"]:
-        st.session_state["input_smiles"] = user_smiles
+# Determine the active molecule to analyze
+if submit_clicked:
+    if entered_smiles.strip():
+        st.session_state["active_smiles"] = entered_smiles.strip()
+        st.session_state["active_name"] = "Custom Molecule"
+        st.session_state["custom_text_val"] = entered_smiles.strip()
+    else:
+        # If the user box is empty, the chosen sample is used!
+        st.session_state["active_smiles"] = PRESET_MOLECULES[chosen_sample]
+        st.session_state["active_name"] = chosen_sample
+        st.session_state["custom_text_val"] = ""
+else:
+    # If the user changed the sample selector while the custom box is empty, use the sample
+    if not entered_smiles.strip() and chosen_sample != st.session_state["active_name"]:
+        st.session_state["active_smiles"] = PRESET_MOLECULES[chosen_sample]
+        st.session_state["active_name"] = chosen_sample
+        st.session_state["custom_text_val"] = ""
 
-with input_col2:
-    st.selectbox(
-        "Or pick from sample molecules:",
-        options=["(Select a preset to load)"] + list(PRESET_MOLECULES.keys()),
-        key="preset_selection",
-        on_change=apply_preset
-    )
+current_smiles = st.session_state["active_smiles"].strip()
+current_name = st.session_state["active_name"]
 
-current_smiles = st.session_state["input_smiles"].strip()
+# Status banner showing what molecule is being evaluated
+if current_name == "Custom Molecule":
+    st.info(f"Analyzing Custom SMILES: `{current_smiles}`")
+else:
+    st.info(f"Analyzing Sample Molecule: **{current_name}** (`{current_smiles}`)")
 
 # Validate SMILES input
-if not current_smiles:
-    st.warning("Please enter a SMILES string in the input box above.")
-    st.stop()
-
 mol = Chem.MolFromSmiles(current_smiles)
 
 if mol is None:
