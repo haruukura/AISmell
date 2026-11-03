@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 NUM_ODOR_LABELS = 138
-DEFAULT_CSV = "curated_gs_lf_4983.csv"
+DEFAULT_CSV = "curated_GS_LF_merged_4983.csv"
 
 # ---------------------------------------------------------------------------
 # Atom (node) featurization
@@ -213,7 +213,7 @@ class OdorDataset:
 
         url = (
             "https://raw.githubusercontent.com/ARY2260/"
-            "openpom/main/openpom/data/curated_datasets/curated_gs_lf_4983.csv"
+            "openpom/main/openpom/data/curated_datasets/curated_GS_LF_merged_4983.csv"
         )
         dest = self.data_dir / DEFAULT_CSV
         logger.info("Downloading dataset from %s → %s", url, dest)
