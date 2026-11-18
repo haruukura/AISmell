@@ -1,0 +1,10 @@
+# Accent color set per mode (not under [theme]) so the app keeps following the viewer's
+# light / dark preference instead of being forced into a single custom theme.
+[theme.light]
+primaryColor = "#7C4DFF"
+
+[theme.dark]
+primaryColor = "#9D7BFF"
+
+[client]
+toolbarMode = "minimal"
