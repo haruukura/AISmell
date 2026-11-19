@@ -178,6 +178,7 @@ class OdorDataset:
     """
 
     SMILES_COL = "nonStereoSMILES"
+    TEXT_COL = "descriptors"
 
     def __init__(self, csv_path: str | Path | None = None, data_dir: str | Path = "data"):
         self.data_dir = Path(data_dir)
@@ -193,8 +194,11 @@ class OdorDataset:
         self.df = pd.read_csv(self.csv_path)
         logger.info("Loaded %d molecules from %s", len(self.df), self.csv_path)
 
-        # Identify label columns (everything except SMILES)
-        self.label_cols = [c for c in self.df.columns if c != self.SMILES_COL]
+        # Identify label columns: everything except SMILES and the free-text
+        # "descriptors" column (a ';'-joined copy of the same labels)
+        self.label_cols = [
+            c for c in self.df.columns if c not in (self.SMILES_COL, self.TEXT_COL)
+        ]
         assert len(self.label_cols) == NUM_ODOR_LABELS, (
             f"Expected {NUM_ODOR_LABELS} label columns, got {len(self.label_cols)}"
         )

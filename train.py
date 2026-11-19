@@ -31,11 +31,23 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from dataset import OdorDataset, MolGraph, Subset, collate_mol_graphs
 from model import MPNNPOMModel
 
 logger = logging.getLogger(__name__)
+
+
+def pick_device(preference: str = "auto") -> torch.device:
+    """NVIDIA GPU (cuda), then Apple Silicon GPU (mps), then CPU, unless one is named."""
+    if preference != "auto":
+        return torch.device(preference)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
 
 
 # ===================================================================
@@ -90,13 +102,15 @@ def train_one_epoch(
     device: torch.device,
     scaler: torch.amp.GradScaler | None = None,
     max_grad_norm: float = 5.0,
+    desc: str = "Training",
 ) -> float:
     """Train for one epoch. Returns average loss."""
     model.train()
     total_loss = 0.0
     n_batches = 0
 
-    for batch in loader:
+    progress = tqdm(loader, desc=desc, unit="batch", leave=False, position=1, dynamic_ncols=True)
+    for batch in progress:
         batch = move_batch_to_device(batch, device)
         optimizer.zero_grad()
 
@@ -118,6 +132,7 @@ def train_one_epoch(
 
         total_loss += loss.item()
         n_batches += 1
+        progress.set_postfix(loss=f"{total_loss / n_batches:.4f}")
 
     return total_loss / max(n_batches, 1)
 
@@ -170,6 +185,7 @@ def train_model(
     model_dir: str = "saved_models/model_1",
     data_dir: str = "data",
     use_amp: bool = True,
+    device: str = "auto",
 ) -> dict:
     """Train a single MPNN-POM model and save the best checkpoint.
 
@@ -177,7 +193,7 @@ def train_model(
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = pick_device(device)
     logger.info("Training on device: %s (seed=%d)", device, seed)
 
     # ---- Data -----------------------------------------------------------
@@ -229,38 +245,51 @@ def train_model(
     history = {"train_loss": [], "val_loss": [], "val_auc": [], "lr": []}
 
     logger.info("Starting training for %d epochs...", epochs)
-    for epoch in range(1, epochs + 1):
-        t0 = time.time()
-        train_loss = train_one_epoch(
-            model, train_loader, criterion, optimizer, device, scaler, max_grad_norm
+    # Log lines are printed above the progress bars instead of breaking them
+    with logging_redirect_tqdm():
+        epoch_bar = tqdm(
+            range(1, epochs + 1), desc="Overall", unit="epoch", position=0, dynamic_ncols=True
         )
-        val_loss, val_auc = evaluate(model, val_loader, criterion, device)
-        scheduler.step()
-        elapsed = time.time() - t0
-
-        current_lr = optimizer.param_groups[0]["lr"]
-        history["train_loss"].append(train_loss)
-        history["val_loss"].append(val_loss)
-        history["val_auc"].append(val_auc)
-        history["lr"].append(current_lr)
-
-        is_best = val_auc > best_val_auc
-        if is_best:
-            best_val_auc = val_auc
-            best_epoch = epoch
-            torch.save(model.state_dict(), model_path / "best_model.pt")
-
-        if epoch % max(1, epochs // 20) == 0 or epoch == 1 or is_best:
-            marker = " [best]" if is_best else ""
-            logger.info(
-                "Epoch %3d/%d  train_loss=%.4f  val_loss=%.4f  "
-                "val_AUC=%.4f  lr=%.2e  (%.1fs)%s",
-                epoch, epochs, train_loss, val_loss, val_auc,
-                current_lr, elapsed, marker,
+        for epoch in epoch_bar:
+            t0 = time.time()
+            train_loss = train_one_epoch(
+                model, train_loader, criterion, optimizer, device, scaler, max_grad_norm,
+                desc=f"Epoch {epoch}/{epochs}",
             )
+            val_loss, val_auc = evaluate(model, val_loader, criterion, device)
+            scheduler.step()
+            elapsed = time.time() - t0
+
+            current_lr = optimizer.param_groups[0]["lr"]
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss)
+            history["val_auc"].append(val_auc)
+            history["lr"].append(current_lr)
+
+            is_best = val_auc > best_val_auc
+            if is_best:
+                best_val_auc = val_auc
+                best_epoch = epoch
+                # Saved as CPU tensors so the file loads on any machine (e.g. the app's server)
+                cpu_state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+                torch.save(cpu_state, model_path / "best_model.pt")
+
+            epoch_bar.set_postfix(val_AUC=f"{val_auc:.4f}", best=f"{best_val_auc:.4f}")
+
+            if epoch % max(1, epochs // 20) == 0 or epoch == 1 or is_best:
+                marker = " [best]" if is_best else ""
+                logger.info(
+                    "Epoch %3d/%d  train_loss=%.4f  val_loss=%.4f  "
+                    "val_AUC=%.4f  lr=%.2e  (%.1fs)%s",
+                    epoch, epochs, train_loss, val_loss, val_auc,
+                    current_lr, elapsed, marker,
+                )
+        epoch_bar.close()
 
     # ---- Test evaluation ------------------------------------------------
-    model.load_state_dict(torch.load(model_path / "best_model.pt", weights_only=True))
+    model.load_state_dict(
+        torch.load(model_path / "best_model.pt", map_location=device, weights_only=True)
+    )
     test_loss, test_auc = evaluate(model, test_loader, criterion, device)
     logger.info("Test ROC-AUC: %.4f (best val epoch %d, val AUC %.4f)", test_auc, best_epoch, best_val_auc)
 
@@ -342,6 +371,10 @@ def main():
     parser.add_argument("--model-dir", type=str, default="saved_models", help="Model save directory")
     parser.add_argument("--data-dir", type=str, default="data", help="Dataset directory")
     parser.add_argument("--no-amp", action="store_true", help="Disable mixed precision")
+    parser.add_argument(
+        "--device", choices=["auto", "cpu", "mps", "cuda"], default="auto",
+        help="auto = NVIDIA GPU, else Apple Silicon GPU (mps), else CPU",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -360,6 +393,7 @@ def main():
         num_message_passing=args.num_mp,
         data_dir=args.data_dir,
         use_amp=not args.no_amp,
+        device=args.device,
     )
 
     if args.ensemble > 0:
