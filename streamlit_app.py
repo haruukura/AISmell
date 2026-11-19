@@ -14,7 +14,12 @@ PAPER_URL = "https://www.science.org/doi/10.1126/science.ade4401"
 OPENPOM_URL = "https://github.com/ARY2260/openpom"
 
 reference_labels = st.cache_data(show_spinner="Loading reference data...")(core.fetch_reference_labels)
-load_model = st.cache_resource(show_spinner=False)(core.load_model)
+
+
+@st.cache_resource(show_spinner=False, max_entries=1)
+def load_model(weights_version):
+    """Cached per version of the weights file, so a newly pushed model loads without a reboot."""
+    return core.load_model()
 
 
 # --- State -------------------------------------------------------------------------------
@@ -80,7 +85,7 @@ if mol is None:
 props = core.properties(mol)
 reference, full_reference = reference_labels()
 known = reference.get(core.lookup_key(mol))
-model, model_ready = load_model()
+model, model_ready = load_model(core.weights_version())
 
 with st.container(border=True):
     st.subheader(ss.name or "Your molecule", anchor=False)

@@ -123,6 +123,15 @@ def fetch_reference_labels() -> tuple[dict[str, list[str]], bool]:
         return fallback, False
 
 
+def weights_version() -> tuple[int, int] | None:
+    """Changes whenever the weights file is added or replaced (e.g. by a git pull)."""
+    try:
+        stat = WEIGHTS_PATH.stat()
+    except FileNotFoundError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
 def load_model() -> tuple[MPNNPOMModel | None, bool]:
     """Returns (model, True) if trained weights are present, else (None, False)."""
     if not WEIGHTS_PATH.exists():
